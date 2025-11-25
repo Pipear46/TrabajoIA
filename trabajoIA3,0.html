@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador Estadístico - Estilo Dark</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+        .sidebar { min-height: 100vh; background: #212529; color: white; padding-top: 20px; }
+        .control-panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        .kpi-card { 
+            background: white; 
+            border-radius: 8px; 
+            padding: 15px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+            height: 100%;
+        }
+        
+        /* --- ESTILO PERSONALIZADO DEL TOOLTIP (TIPO IMAGEN) --- */
+        .tooltip-inner {
+            max-width: 350px;       /* Más ancho para leer bien */
+            padding: 12px;          /* Más espacio interno */
+            text-align: left;       /* Alineado a la izquierda como la foto */
+            background-color: #1a1d20; /* Fondo casi negro */
+            color: #ffffff;         /* Texto blanco */
+            border: 1px solid #495057; /* Borde sutil */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4); /* Sombra para profundidad */
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.9rem;
+        }
+        /* Flecha del tooltip oscura */
+        .bs-tooltip-top .tooltip-arrow::before, .bs-tooltip-auto[data-popper-placement^=top] .tooltip-arrow::before {
+            border-top-color: #1a1d20 !important;
+        }
+        .bs-tooltip-bottom .tooltip-arrow::before, .bs-tooltip-auto[data-popper-placement^=bottom] .tooltip-arrow::before {
+            border-bottom-color: #1a1d20 !important;
+        }
+
+        /* Icono de info */
+        .info-icon { color: #adb5bd; cursor: help; margin-left: 5px; font-size: 0.85rem; transition: color 0.3s; }
+        .info-icon:hover { color: #0d6efd; }
+
+        /* Navegación */
+        .nav-pills .nav-link { color: #adb5bd; cursor: pointer; text-align: left; margin-bottom: 5px; width: 100%; }
+        .nav-pills .nav-link:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-pills .nav-link.active { background-color: #0d6efd; color: white; font-weight: bold; }
+        
+        #preview-area, #desc-content, #prob-content { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        
+        <div class="col-md-2 sidebar d-none d-md-block">
+            <h4 class="text-center mb-4">📊 Data<span class="text-primary">Master</span></h4>
+            <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist">
+                <button class="nav-link active" id="btn-data" data-bs-toggle="pill" data-bs-target="#tab-data" type="button"><i class="bi bi-upload me-2"></i> Carga de Datos</button>
+                <button class="nav-link" id="btn-desc" data-bs-toggle="pill" data-bs-target="#tab-desc" type="button"><i class="bi bi-bar-chart me-2"></i> Descriptiva</button>
+                <button class="nav-link" id="btn-prob" data-bs-toggle="pill" data-bs-target="#tab-prob" type="button"><i class="bi bi-diagram-3 me-2"></i> Probabilidad</button>
+            </div>
+            <div class="mt-4 px-3 small text-muted text-center border-top pt-3">
+                <p>Estilo Dark<br>Tooltips Mejorados</p>
+            </div>
+        </div>
+
+        <div class="col-md-10 p-4">
+            <div class="tab-content">
+                
+                <div class="tab-pane fade show active" id="tab-data">
+                    <div class="container">
+                        <h2 class="mb-4 border-bottom pb-2">Configuración del Dataset</h2>
+                        <div class="control-panel text-center py-5">
+                            <i class="bi bi-cloud-upload fs-1 text-primary"></i>
+                            <h4 class="mt-3">Carga de Archivos</h4>
+                            <input type="file" id="csvFileInput" class="form-control w-50 mx-auto mb-3" accept=".csv">
+                            <p class="text-muted small">- O -</p>
+                            <button class="btn btn-lg btn-success" onclick="loadSampleData()">
+                                <i class="bi bi-database-fill-add"></i> Cargar Datos de Prueba (Salud)
+                            </button>
+                        </div>
+                        <div id="preview-area" class="mt-4">
+                            <h5>Vista Previa (<span id="rowCount">0</span> registros)</h5>
+                            <div class="table-responsive bg-white rounded shadow-sm" style="max-height: 400px;">
+                                <table class="table table-sm table-striped table-hover mb-0" id="dataTable">
+                                    <thead class="table-dark sticky-top" id="tableHead"></thead>
+                                    <tbody id="tableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-desc">
+                    <h2 class="mb-4 border-bottom pb-2">Estadística Descriptiva Explicada</h2>
+                    
+                    <div class="control-panel bg-white border p-3 mb-3 d-flex flex-wrap gap-4 align-items-end">
+                        <div>
+                            <label class="fw-bold mb-1">Variable Numérica:</label>
+                            <select id="selectVarNum" class="form-select border-primary" onchange="updateDescriptive()">
+                                <option value="">-- Seleccionar --</option>
+                            </select>
+                        </div>
+                        <div class="flex-grow-1" id="binControl" style="display:none;">
+                            <label class="fw-bold mb-1 d-flex justify-content-between">
+                                <span>Resolución del Histograma (Bins)</span>
+                                <span class="badge bg-primary">Bins: <span id="binVal">10</span></span>
+                            </label>
+                            <input type="range" class="form-range" id="sliderBins" min="5" max="50" value="10" oninput="document.getElementById('binVal').innerText=this.value; updateDescriptive(false)">
+                        </div>
+                    </div>
+                    
+                    <div id="desc-content">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <div class="kpi-card border-start border-4 border-primary">
+                                    <small class="text-muted text-uppercase fw-bold">Tendencia Central</small>
+                                    <div class="mt-2">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Media <i class="bi bi-info-circle-fill info-icon" id="tip-mean" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <h4 id="d-mean" class="mb-0 text-primary fw-bold">--</h4>
+                                        </div>
+                                        <hr class="my-1">
+                                        <div class="d-flex justify-content-between small">
+                                            <span>Moda <i class="bi bi-info-circle-fill info-icon" id="tip-mode" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <span id="d-mode" class="fw-bold text-dark">--</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <div class="kpi-card border-start border-4 border-success">
+                                    <small class="text-muted text-uppercase fw-bold">Posición</small>
+                                    <div class="d-flex justify-content-between mt-2">
+                                        <div class="text-center">
+                                            <span class="small d-block text-muted">Q1 <i class="bi bi-info-circle-fill info-icon" id="tip-q1" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <strong id="d-q1" class="text-dark">--</strong>
+                                        </div>
+                                        <div class="text-center border-start border-end px-2">
+                                            <span class="small d-block text-success fw-bold">Mediana <i class="bi bi-info-circle-fill info-icon" id="tip-median" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <strong id="d-median" class="text-success h5 mb-0">--</strong>
+                                        </div>
+                                        <div class="text-center">
+                                            <span class="small d-block text-muted">Q3 <i class="bi bi-info-circle-fill info-icon" id="tip-q3" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <strong id="d-q3" class="text-dark">--</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                
+                            <div class="col-md-3">
+                                <div class="kpi-card border-start border-4 border-warning">
+                                    <small class="text-muted text-uppercase fw-bold">Dispersión</small>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div>
+                                            <span class="small d-block">Desviación <i class="bi bi-info-circle-fill info-icon" id="tip-std" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span>
+                                            <h4 id="d-std" class="mb-0 text-warning fw-bold">--</h4>
+                                        </div>
+                                        <div class="text-end lh-1">
+                                            <span class="badge bg-warning text-dark" id="d-cv">CV: --%</span>
+                                            <i class="bi bi-info-circle-fill info-icon" id="tip-cv" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i>
+                                            <br><small style="font-size:0.65rem" class="text-muted">Homogeneidad</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                
+                            <div class="col-md-3">
+                                <div class="kpi-card border-start border-4 border-danger">
+                                    <small class="text-muted text-uppercase fw-bold">Forma</small>
+                                    <div class="d-flex justify-content-between mt-2">
+                                        <div><span class="small">Curtosis <i class="bi bi-info-circle-fill info-icon" id="tip-kurt" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span> <strong id="d-kurt">--</strong></div>
+                                        <div><span class="small">Asimetría <i class="bi bi-info-circle-fill info-icon" id="tip-skew" data-bs-toggle="tooltip" data-bs-html="true" title="Calculando..."></i></span> <strong id="d-skew">--</strong></div>
+                                    </div>
+                                    <div class="mt-2 text-center" id="outlier-alert"></div>
+                                </div>
+                            </div>
+                        </div>
+                
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-white"><i class="bi bi-bar-chart-fill text-primary"></i> Histograma de Frecuencias</div>
+                                    <div class="card-body"><canvas id="chartHist" style="height:350px;"></canvas></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header bg-dark text-white fw-bold">Resumen</div>
+                                    <ul class="list-group list-group-flush" id="statsList"></ul>
+                                    <div class="card-body bg-light border-top">
+                                        <h6 class="fw-bold text-muted small">INTERPRETACIÓN:</h6>
+                                        <p id="auto-interpretation" class="small mb-0 fst-italic">...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-prob">
+                    <h2 class="mb-4 border-bottom pb-2">Laboratorio de Probabilidad</h2>
+                    
+                    <div class="control-panel bg-white border p-3 mb-3">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="fw-bold mb-1">1. Variable Principal (X):</label>
+                                <select id="selectProbVar1" class="form-select border-primary" onchange="resetProbAnalysis()">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="fw-bold mb-1">2. Modelo de Distribución:</label>
+                                <select id="selectProbModel" class="form-select border-success" onchange="updateProbAnalysis()" disabled>
+                                    <option value="">-- Selecciona variable primero --</option>
+                                    <option value="multinomial">Multinomial (Frecuencias)</option>
+                                    <option value="uniform">Uniforme Discreta</option>
+                                    <option value="bernoulli">Bernoulli (Binaria)</option>
+                                    <option value="binomial">Binomial (Teórica)</option>
+                                    <option value="poisson">Poisson (Conteos)</option>
+                                    <option value="hypergeo">Hipergeométrica</option>
+                                    <option value="bivariate">Bivariada / Conjunta</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" id="divVar2" style="display:none;">
+                                <label class="fw-bold mb-1">Variable Secundaria (Y):</label>
+                                <select id="selectProbVar2" class="form-select border-warning" onchange="updateProbAnalysis()">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="prob-content" class="row">
+                        <div class="col-md-4">
+                            <div class="card shadow-sm h-100 border-0 bg-light">
+                                <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between">
+                                    <span id="probTitle">Análisis</span>
+                                    <i class="bi bi-info-circle-fill text-white" style="cursor:help;" id="tip-model-desc" data-bs-toggle="tooltip" data-bs-html="true" title="Info"></i>
+                                </div>
+                                <div class="card-body">
+                                    <p id="probDesc" class="small text-muted mb-3">Selecciona un modelo.</p>
+                                    <div id="probControls"></div>
+                                    <hr>
+                                    <div id="probStats" class="small"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body"><canvas id="chartProb"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // --- VARIABLES GLOBALES ---
+    let dataset = [], headers = [];
+    let chartHist = null, chartProb = null;
+    const tooltipInstances = {};
+
+    // Utils Matemáticos
+    const factorial = n => (n <= 1 ? 1 : n * factorial(n - 1));
+    const combinations = (n, k) => (k < 0 || k > n) ? 0 : factorial(n) / (factorial(k) * factorial(n - k));
+    const getPercentile = (sortedArr, p) => {
+        const index = (p / 100) * (sortedArr.length - 1);
+        const lower = Math.floor(index), upper = Math.ceil(index);
+        const weight = index - lower;
+        if (upper === lower) return sortedArr[index];
+        return (1 - weight) * sortedArr[lower] + weight * sortedArr[upper];
+    };
+
+    // --- FUNCIÓN GENERADORA DE TOOLTIP ESTILIZADO (COMO LA IMAGEN) ---
+    function getTooltipHTML(title, desc, example) {
+        return `
+            <div class="text-start">
+                <div class="fw-bold text-white border-bottom border-secondary pb-1 mb-2" style="font-size: 0.95rem;">${title}</div>
+                <div class="text-light mb-2 small">${desc}</div>
+                <div class="small text-info fst-italic"><em>${example}</em></div>
+            </div>
+        `;
+    }
+
+    // Actualizador de tooltips
+    function updateTooltip(id, htmlContent) {
+        const el = document.getElementById(id);
+        if(!el) return;
+        if(tooltipInstances[id]) tooltipInstances[id].dispose();
+        
+        el.setAttribute('data-bs-title', htmlContent);
+        tooltipInstances[id] = new bootstrap.Tooltip(el);
+    }
+
+    // --- CARGA DE DATOS ---
+    function loadSampleData() {
+        const sampleCSV = `ID,Edad,Presion,Estres,Llegadas,Diabetes,Genero,Fumador
+1,55,120,4,2,0,M,0
+2,62,135,7,3,1,F,1
+3,48,118,3,1,0,M,0
+4,70,145,8,4,1,M,1
+5,35,110,2,2,0,F,0
+6,58,130,6,2,1,F,0
+7,42,122,5,1,0,M,1
+8,66,140,7,5,1,F,0
+9,29,115,9,2,0,M,1
+10,51,128,4,3,0,F,0
+11,60,132,6,2,1,M,1
+12,45,119,3,0,0,M,0
+13,75,150,5,4,1,F,0
+14,38,121,8,1,0,F,1
+15,53,125,4,2,0,M,0
+16,41,116,2,1,0,F,0
+17,68,138,7,4,1,M,1
+18,33,112,5,2,0,F,0
+19,56,129,6,3,1,M,1
+20,49,124,3,1,0,F,0
+21,25,108,8,1,0,M,1
+22,64,136,7,3,1,F,0
+23,32,114,2,0,0,M,0
+24,47,123,4,2,0,F,0
+25,59,131,5,2,1,M,1
+26,73,148,8,5,1,F,1
+27,36,117,3,1,0,M,0
+28,50,126,5,2,0,F,0
+29,28,111,9,2,0,M,1
+30,69,142,7,4,1,F,1
+31,44,120,4,1,0,M,0
+32,54,127,6,3,1,F,0
+33,39,119,2,1,0,M,0
+34,61,134,5,3,1,F,1
+35,57,133,6,2,1,M,1
+36,78,155,9,5,1,F,0
+37,30,113,1,0,0,M,0
+38,63,137,7,3,1,F,1
+39,40,121,3,1,0,M,0
+40,52,125,4,2,0,F,0
+41,46,122,5,2,0,M,0
+42,71,146,8,4,1,F,1
+43,34,115,2,1,0,M,0
+44,55,129,6,3,1,F,0
+45,27,109,7,2,0,M,1
+46,65,139,5,3,1,F,1
+47,43,124,3,1,0,M,0
+48,58,132,7,2,1,F,0
+49,37,118,4,1,0,M,0
+50,74,151,8,5,1,F,1
+51,48,126,2,2,0,M,0
+52,62,136,6,3,1,F,1
+53,31,112,5,0,0,M,0
+54,53,128,4,2,0,F,0
+55,67,143,7,4,1,M,1
+56,42,123,3,1,0,F,0
+57,56,130,5,2,1,M,1
+58,29,110,8,1,0,F,0
+59,70,149,9,4,1,M,1
+60,49,125,4,2,0,F,0
+61,35,116,2,1,0,M,0
+62,60,135,6,3,1,F,1
+63,45,121,3,1,0,M,0
+64,59,134,7,3,1,F,0
+65,26,107,5,0,0,M,1
+66,76,153,8,5,1,F,1
+67,41,120,4,2,0,M,0
+68,54,129,6,2,1,F,0
+69,33,114,2,1,0,M,0
+70,66,141,7,4,1,F,1
+71,51,127,3,2,0,M,0
+72,38,118,5,1,0,F,0
+73,63,138,6,3,1,M,1
+74,47,122,4,2,0,F,0
+75,72,147,8,4,1,M,1
+76,28,111,7,1,0,F,0
+77,57,131,5,2,1,M,1
+78,39,119,2,0,0,F,0
+79,64,137,6,3,1,M,1
+80,50,124,3,2,0,F,0
+81,46,123,4,1,0,M,0
+82,68,144,7,4,1,F,1
+83,32,113,2,0,0,M,0
+84,55,128,5,2,1,F,0
+85,75,152,9,5,1,M,1
+86,43,125,3,2,0,F,0
+87,61,135,6,3,1,M,1
+88,30,112,4,1,0,F,0
+89,52,126,5,2,0,M,0
+90,69,145,8,4,1,F,1
+91,37,117,2,1,0,M,0
+92,58,133,6,3,1,F,0
+93,25,106,7,0,0,M,0
+94,77,154,9,5,1,F,1
+95,40,121,3,1,0,M,0
+96,65,140,5,3,1,F,1
+97,34,115,2,1,0,M,0
+98,56,130,6,2,1,F,0
+99,49,124,4,2,0,M,0
+100,73,149,8,4,1,F,1`;
+        processCSV(sampleCSV);
+    }
+
+    document.getElementById('csvFileInput').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = e => processCSV(e.target.result);
+        reader.readAsText(file);
+    });
+
+    function processCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        const separator = lines[0].includes(';') ? ';' : ',';
+        headers = lines[0].split(separator).map(h => h.trim());
+        dataset = [];
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(separator);
+            if (row.length === headers.length) {
+                let obj = {};
+                headers.forEach((h, index) => {
+                    let val = row[index].trim();
+                    if (!isNaN(val) && val !== '') obj[h] = parseFloat(val);
+                    else obj[h] = val;
+                });
+                dataset.push(obj);
+            }
+        }
+        document.getElementById('rowCount').innerText = dataset.length;
+        document.getElementById('preview-area').style.display = 'block';
+        renderTablePreview();
+        populateSelects();
+    }
+
+    function renderTablePreview() {
+        const thead = document.getElementById('tableHead');
+        const tbody = document.getElementById('tableBody');
+        thead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+        tbody.innerHTML = dataset.slice(0, 5).map(row => `<tr>${headers.map(h => `<td>${row[h]}</td>`).join('')}</tr>`).join('');
+    }
+
+    function populateSelects() {
+        const selects = ['selectVarNum', 'selectProbVar1', 'selectProbVar2'];
+        selects.forEach(id => {
+            const sel = document.getElementById(id);
+            sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+            headers.forEach(h => sel.innerHTML += `<option value="${h}">${h}</option>`);
+        });
+    }
+
+    // --- DESCRIPTIVA ---
+    function updateDescriptive(resetBins = true) {
+        const col = document.getElementById('selectVarNum').value;
+        if(!col) return;
+        
+        const values = dataset.map(d => d[col]).filter(v => typeof v === 'number');
+        if(values.length === 0) return alert("Selecciona una variable numérica válida");
+        
+        document.getElementById('desc-content').style.display = 'block';
+        document.getElementById('binControl').style.display = 'block';
+        
+        values.sort((a,b) => a - b);
+        const n = values.length;
+        const sum = values.reduce((a,b)=>a+b, 0);
+        const mean = sum/n;
+        const min = values[0];
+        const max = values[n-1];
+        const variance = values.reduce((a,b)=>a+Math.pow(b-mean,2),0)/(n-1);
+        const std = Math.sqrt(variance);
+        const cv = (std / mean) * 100;
+
+        const q1 = getPercentile(values, 25);
+        const median = getPercentile(values, 50);
+        const q3 = getPercentile(values, 75);
+        const iqr = q3 - q1;
+
+        let s3 = 0, s4 = 0;
+        values.forEach(v => { s3 += Math.pow(v - mean, 3); s4 += Math.pow(v - mean, 4); });
+        const skewness = (n * s3) / ((n-1)*(n-2) * Math.pow(std, 3));
+        const kurtosis = ((n*(n+1)*s4) / ((n-1)*(n-2)*(n-3)*Math.pow(std, 4))) - ((3*Math.pow(n-1,2))/((n-2)*(n-3)));
+
+        const modeMap = {}; let maxCount = 0;
+        values.forEach(v => { modeMap[v] = (modeMap[v] || 0) + 1; if(modeMap[v] > maxCount) maxCount = modeMap[v]; });
+        let modes = Object.keys(modeMap).filter(k => modeMap[k] === maxCount);
+        const modeText = modes.length > 5 ? "Múltiple" : modes.join(', ');
+
+        const lowerFence = q1 - 1.5 * iqr;
+        const upperFence = q3 + 1.5 * iqr;
+        const outliers = values.filter(v => v < lowerFence || v > upperFence);
+
+        // Update Text
+        document.getElementById('d-mean').innerText = mean.toFixed(2);
+        document.getElementById('d-mode').innerText = modeText;
+        document.getElementById('d-median').innerText = median.toFixed(2);
+        document.getElementById('d-q1').innerText = q1.toFixed(2);
+        document.getElementById('d-q3').innerText = q3.toFixed(2);
+        document.getElementById('d-std').innerText = std.toFixed(2);
+        document.getElementById('d-cv').innerText = `CV: ${cv.toFixed(1)}%`;
+        document.getElementById('d-kurt').innerText = kurtosis.toFixed(2);
+        document.getElementById('d-skew').innerText = skewness.toFixed(2);
+
+        // --- ACTUALIZACIÓN DE TOOLTIPS CON ESTILO IMAGEN ---
+        updateTooltip('tip-mean', getTooltipHTML(
+            "Promedio Aritmético", 
+            "Suma de todos los valores dividida por el total.", 
+            `Ejemplo: ${sum.toFixed(0)} / ${n} = ${mean.toFixed(2)}`
+        ));
+        
+        updateTooltip('tip-mode', getTooltipHTML(
+            "Moda", 
+            "El valor que aparece con mayor frecuencia en el conjunto de datos.", 
+            `Ejemplo: El valor '${modes[0]}' aparece ${maxCount} veces.`
+        ));
+
+        updateTooltip('tip-median', getTooltipHTML(
+            "Mediana (Q2)", 
+            "El valor central que divide los datos en dos partes iguales (50% / 50%).", 
+            `Ejemplo: La mitad de los datos es menor a ${median.toFixed(2)}.`
+        ));
+
+        updateTooltip('tip-q1', getTooltipHTML(
+            "Primer Cuartil (Q1)", 
+            "Valor que deja por debajo al 25% de los datos ordenados.", 
+            `Ejemplo: El 25% es menor o igual a ${q1.toFixed(2)}.`
+        ));
+
+        updateTooltip('tip-q3', getTooltipHTML(
+            "Tercer Cuartil (Q3)", 
+            "Valor que deja por debajo al 75% de los datos ordenados.", 
+            `Ejemplo: El 75% es menor o igual a ${q3.toFixed(2)}.`
+        ));
+
+        updateTooltip('tip-std', getTooltipHTML(
+            "Desviación Estándar", 
+            "Promedio de cuánto se alejan los datos individuales de la media.", 
+            `Ejemplo: Los datos varían aprox +/- ${std.toFixed(2)} unidades.`
+        ));
+
+        updateTooltip('tip-cv', getTooltipHTML(
+            "Coeficiente de Variación", 
+            "Porcentaje de variabilidad relativa a la media. (s/x)*100.", 
+            `Ejemplo: (${std.toFixed(2)} / ${mean.toFixed(2)}) * 100 = ${cv.toFixed(1)}%`
+        ));
+        
+        updateTooltip('tip-kurt', getTooltipHTML(
+            "Curtosis", 
+            "Indica si la curva es muy apuntada (positiva) o aplanada (negativa).", 
+            `Resultado: ${kurtosis.toFixed(2)} (${kurtosis > 0 ? 'Leptocúrtica' : 'Platicúrtica'})`
+        ));
+
+        updateTooltip('tip-skew', getTooltipHTML(
+            "Asimetría", 
+            "Indica hacia dónde se alarga la cola de la distribución.", 
+            `Resultado: ${skewness.toFixed(2)} (${skewness > 0 ? 'Cola Derecha' : 'Cola Izquierda'})`
+        ));
+
+        const outDiv = document.getElementById('outlier-alert');
+        outDiv.innerHTML = outliers.length > 0 ? `<span class="badge bg-danger">¡${outliers.length} Atípicos!</span>` : `<span class="badge bg-success">Sin Atípicos</span>`;
+
+        document.getElementById('statsList').innerHTML = `
+            <li class="list-group-item d-flex justify-content-between"><span>Mínimo:</span> <strong>${min}</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Cuartil 1:</span> <strong>${q1.toFixed(2)}</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Mediana:</span> <strong>${median.toFixed(2)}</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Cuartil 3:</span> <strong>${q3.toFixed(2)}</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Máximo:</span> <strong>${max}</strong></li>
+            <li class="list-group-item bg-light text-center small">IQR: ${iqr.toFixed(2)}</li>
+        `;
+
+        let interpret = `Los datos oscilan entre ${min} y ${max}. `;
+        if(cv < 15) interpret += "Muestra muy homogénea. ";
+        else if(cv > 30) interpret += "Muestra heterogénea (dispersa). ";
+        if(skewness > 0.5) interpret += "Sesgo positivo (cola derecha).";
+        else if(skewness < -0.5) interpret += "Sesgo negativo (cola izquierda).";
+        else interpret += "Distribución aprox. simétrica.";
+        document.getElementById('auto-interpretation').innerText = interpret;
+
+        drawDynamicHistogram(values, resetBins);
+    }
+
+    function drawDynamicHistogram(values, resetBins) {
+        if(chartHist) chartHist.destroy();
+        let numBins = parseInt(document.getElementById('sliderBins').value);
+        if(resetBins) {
+            numBins = Math.ceil(1 + 3.322 * Math.log10(values.length));
+            document.getElementById('sliderBins').value = numBins;
+            document.getElementById('binVal').innerText = numBins;
+        }
+        const min = values[0], max = values[values.length-1];
+        const width = (max - min) / numBins;
+        const bins = [], counts = new Array(numBins).fill(0);
+        for(let i=0; i<numBins; i++) bins.push(`${(min + i*width).toFixed(1)} - ${(min + (i+1)*width).toFixed(1)}`);
+        values.forEach(v => {
+            let idx = Math.floor((v - min) / width);
+            if(idx >= numBins) idx = numBins - 1;
+            counts[idx]++;
+        });
+        chartHist = new Chart(document.getElementById('chartHist'), {
+            type: 'bar',
+            data: { labels: bins, datasets: [{ label: 'Frecuencia', data: counts, backgroundColor: '#0d6efd' }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    // --- PROBABILIDAD ---
+    function resetProbAnalysis() {
+        const var1 = document.getElementById('selectProbVar1').value;
+        const modelSel = document.getElementById('selectProbModel');
+        document.getElementById('prob-content').style.display = 'none';
+        modelSel.disabled = !var1; modelSel.value = "";
+    }
+
+    function updateProbAnalysis() {
+        const col = document.getElementById('selectProbVar1').value;
+        const model = document.getElementById('selectProbModel').value;
+        const col2 = document.getElementById('selectProbVar2').value;
+        if(!col || !model) return;
+
+        document.getElementById('divVar2').style.display = (model === 'bivariate') ? 'block' : 'none';
+        if(model === 'bivariate' && !col2) return;
+
+        document.getElementById('prob-content').style.display = 'flex';
+        const vals = dataset.map(d => d[col]);
+        const n = vals.length;
+        let title="", desc="", chartData={}, chartType='bar', tooltipText="";
+
+        if(model === 'multinomial') {
+            title = "Multinomial"; desc = "Frecuencia por categoría.";
+            const counts = {}; vals.forEach(v => counts[v]=(counts[v]||0)+1);
+            chartType = 'doughnut';
+            chartData = { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#0d6efd','#198754','#ffc107','#dc3545','#6610f2'] }] };
+            tooltipText = getTooltipHTML("Multinomial", "Generalización de la Binomial para >2 categorías.", `Categorías detectadas: ${Object.keys(counts).length}`);
+        
+        } else if (model === 'uniform') {
+            title = "Uniforme Discreta"; desc = "Prueba de equiprobabilidad.";
+            const counts = {}; vals.forEach(v => counts[v]=(counts[v]||0)+1);
+            const k = Object.keys(counts).length, expected = n/k;
+            chartData = { labels: Object.keys(counts), datasets: [{ label: 'Real', data: Object.values(counts), backgroundColor: '#0d6efd' }, { label: 'Ideal', data: Array(k).fill(expected), type: 'line', borderColor: 'red' }] };
+            tooltipText = getTooltipHTML("Uniforme", "Todos los eventos tienen la misma probabilidad (1/k).", `Esperado: ${expected.toFixed(1)} por categoría.`);
+        
+        } else if (model === 'bernoulli') {
+            title = "Bernoulli"; desc = "Binaria (Éxito/Fracaso).";
+            const counts = {}; vals.forEach(v => counts[v]=(counts[v]||0)+1);
+            const keys = Object.keys(counts);
+            const p = counts[keys[1]]/n || 0;
+            chartType = 'pie'; chartData = { labels: keys, datasets: [{ data: Object.values(counts), backgroundColor: ['#dc3545','#198754'] }] };
+            tooltipText = getTooltipHTML("Bernoulli", "Solo dos resultados posibles.", `p = ${p.toFixed(2)}, q = ${(1-p).toFixed(2)}`);
+        
+        } else if (model === 'binomial') {
+            title = "Binomial B(n, p)"; desc = "Prob. k éxitos en n intentos.";
+            const counts = {}; vals.forEach(v => counts[v]=(counts[v]||0)+1);
+            const successKey = Object.keys(counts)[0]; const p = counts[successKey]/n;
+            const simN = 10; 
+            document.getElementById('probControls').innerHTML = `<label>n simulado: 10</label>`;
+            const labels=[], dataP=[];
+            for(let k=0; k<=simN; k++) { labels.push(k); dataP.push(combinations(simN, k)*Math.pow(p,k)*Math.pow(1-p,simN-k)); }
+            chartData = { labels: labels, datasets: [{ label: `Teórica (p=${p.toFixed(2)})`, data: dataP, backgroundColor: '#198754' }] };
+            tooltipText = getTooltipHTML("Binomial", `Probabilidad de éxitos dada p=${p.toFixed(2)}.`, "Calculado usando p real de los datos.");
+        
+        } else if (model === 'poisson') {
+            title = "Poisson"; desc = "Eventos raros. Lambda = Promedio.";
+            const nums = vals.filter(v => !isNaN(v));
+            const lambda = nums.reduce((a,b)=>a+b,0)/nums.length;
+            const counts={}; nums.forEach(v=>counts[v]=(counts[v]||0)+1);
+            const labels=[], obsData=[], theoData=[];
+            for(let i=0; i<=Math.max(...nums,10); i++) {
+                labels.push(i); obsData.push(counts[i]||0);
+                theoData.push((Math.exp(-lambda)*Math.pow(lambda,i)/factorial(i))*nums.length);
+            }
+            chartData = { labels: labels, datasets: [{ label: 'Real', data: obsData, backgroundColor: '#0d6efd' }, { label: 'Teórico', data: theoData, type: 'line', borderColor: 'red' }] };
+            tooltipText = getTooltipHTML("Poisson", "Promedio de eventos (Lambda).", `Lambda = ${lambda.toFixed(2)}`);
+        
+        } else if (model === 'hypergeo') {
+             title = "Hipergeométrica"; desc = "Muestreo sin reemplazo.";
+             chartData = { labels:['Simulación'], datasets:[{label:'Demo', data:[100], backgroundColor:'#ffc107'}]}; 
+             tooltipText = getTooltipHTML("Hipergeométrica", "N (Población Total).", `N = ${n}`);
+        
+        } else if (model === 'bivariate') {
+            title = "Bivariada"; desc = "Cruce de variables.";
+            const vals2 = dataset.map(d => d[col2]);
+            const uniqueV1 = [...new Set(vals)], uniqueV2 = [...new Set(vals2)];
+            const matrix = {}; uniqueV1.forEach(v1 => { matrix[v1]={}; uniqueV2.forEach(v2 => matrix[v1][v2]=0); });
+            for(let i=0; i<n; i++) matrix[vals[i]][vals2[i]]++;
+            const datasets = uniqueV2.map((v2,i) => ({ label: `${col2}: ${v2}`, data: uniqueV1.map(v1 => matrix[v1][v2]), backgroundColor: `hsl(${i*50}, 70%, 50%)` }));
+            chartData = { labels: uniqueV1, datasets: datasets };
+            chartType = 'bar';
+            tooltipText = getTooltipHTML("Conjunta", "Frecuencia de X dado Y.", `Matriz de ${uniqueV1.length}x${uniqueV2.length}`);
+        }
+
+        document.getElementById('probTitle').innerText = title;
+        document.getElementById('probDesc').innerText = desc;
+        updateTooltip('tip-model-desc', tooltipText);
+
+        if(chartProb) chartProb.destroy();
+        chartProb = new Chart(document.getElementById('chartProb'), { type: chartType, data: chartData, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: model==='bivariate'}, y: { stacked: model==='bivariate'} } } });
+    }
+</script>
+</body>
+</html>
